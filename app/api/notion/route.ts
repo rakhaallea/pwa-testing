@@ -1,7 +1,13 @@
 import { Client } from "@notionhq/client";
 import { NextResponse } from "next/server";
+import { sendPushToAll } from "@/lib/push-server";
+import { isSameOrigin } from "@/lib/request-guard";
 
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const notion = new Client({ auth: process.env.NOTION_API_KEY });
   const databaseId = process.env.NOTION_DATABASE_ID;
   try {
@@ -54,6 +60,13 @@ export async function POST(request: Request) {
       parent: { database_id: databaseId },
       properties: properties,
     });
+
+    await sendPushToAll({
+      title: "Laporan baru tersimpan",
+      body: name,
+      url: "/",
+      tag: "new-report",
+    }).catch((err) => console.error("Push send error:", err));
 
     return NextResponse.json({ success: true, data: response });
   } catch (error: any) {

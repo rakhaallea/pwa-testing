@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/db";
+import PushToggle from "@/components/PushToggle";
 
 export default function NotionForm() {
   const [name, setName] = useState("");
@@ -150,6 +151,7 @@ export default function NotionForm() {
     <div className="w-full max-w-md mx-auto bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-lg border border-zinc-200 dark:border-zinc-800 mt-8">
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Laporan Baru</h2>
+        <PushToggle />
         {pendingCount > 0 && (
           <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1 rounded-full dark:bg-amber-900 dark:text-amber-300 animate-pulse">
             {pendingCount} Menunggu Sync

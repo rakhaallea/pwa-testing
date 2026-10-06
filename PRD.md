@@ -13,6 +13,7 @@ Dokumen ini mendefinisikan kebutuhan dan implementasi teknis untuk *Proof of Con
 - **Installability:** Memastikan web dapat dipasang (*Add to Home Screen*) di Android, iOS (Safari), dan Desktop (Chrome/Edge).
 - **Offline Resilience:** Menyediakan akses fallback offline ketika perangkat kehilangan koneksi internet.
 - **Asset Caching:** Mengotomatiskan caching shell aplikasi, script, dan aset statis menggunakan *Service Worker*.
+- **Notifikasi Web Push:** Pengguna menerima notifikasi meski aplikasi tertutup ketika ada laporan baru yang tersimpan ke Notion.
 - ****PWA** Audit Standards:** Lolos validasi kriteria **PWA** pada audit Google Lighthouse.
 
 ---
@@ -22,6 +23,8 @@ Dokumen ini mendefinisikan kebutuhan dan implementasi teknis untuk *Proof of Con
 - **Framework:** Next.js (App Router, TypeScript)
 - ****PWA** Library:** `@serwist/next` (atau `@ducanh2912/next-pwa` - *zero-config wrapper Workbox terkini*)
 - **Styling:** Tailwind **CSS** (opsional / minimal)
+- **Web Push:** `web-push` (server pengirim dengan VAPID), `@ducanh2912/next-pwa` dengan custom worker (`worker/index.ts`) untuk event `push` dan `notificationclick`
+- **Database Subscription:** Notion database `push_subscriptions` (kolom: `Id`, `endpoint`, `p256dh`, `auth`, `createdAt`)
 - **Hosting/Local Testing:** Localhost via **HTTPS** (`next dev --experimental-https`) atau deployment via Vercel.
 
 ---
@@ -154,6 +157,22 @@ export default function OfflinePage() {
 
 ---
 
+### 5.5. Web Push Notifications
+
+Notifikasi dikirim dari server setelah laporan berhasil dikirim ke Notion (`app/api/notion/route.ts`).
+
+- **Service worker kustom** (`worker/index.ts`): listener `push` menampilkan notifikasi, dan `notificationclick` memfokuskan tab yang sudah terbuka atau membuka jendela baru.
+- **Subscribe** (`POST /api/push/subscribe`): endpoint harus `https://`, dan `keys.p256dh` serta `keys.auth` wajib ada. Subscription yang sama (berdasarkan `endpoint`) tidak disimpan dua kali.
+- **Kirim** (`lib/push-server.ts`): mengirim ke semua subscription di Notion. Subscription yang mengembalikan HTTP 404 atau 410 diarsipkan.
+- **Environment variable:**
+  - `VAPID_PUBLIC_KEY` dan `NEXT_PUBLIC_VAPID_PUBLIC_KEY`: kunci publik VAPID (kedua variabel berisi nilai yang sama).
+  - `VAPID_PRIVATE_KEY`: hanya di server, tidak boleh diberi prefix `NEXT_PUBLIC_`.
+  - `VAPID_SUBJECT`: alamat `mailto:` atau URL kontak.
+  - `NOTION_SUBSCRIPTION_DB_ID`: ID database `push_subscriptions`.
+- **Syarat platform:** HTTPS. Di iOS, notifikasi hanya tersedia setelah aplikasi di-install ke Home Screen (iOS 16.4+).
+
+---
+
 ## 6. Functional Requirements
 
 | ID | Modul | Deskripsi Kebutuhan |
@@ -163,6 +182,10 @@ export default function OfflinePage() {
 | **FR-03** | Precaching | Aset statis (chunk JS, CSS, icon) otomatis di-cache saat halaman pertama kali dimuat. |
 | **FR-04** | Offline Navigation | Navigasi ke halaman yang pernah dibuka tetap berhasil; membuka rute baru yang belum di-cache menampilkan `/offline`. |
 | **FR-05** | Browser Prompt | Browser memicu prompt native instalasi saat kriteria PWA terpenuhi. |
+| **FR-06** | Push Subscribe | Pengguna dapat mengaktifkan notifikasi lewat tombol; setelah izin diberikan, subscription tersimpan di tabel `push_subscriptions`. |
+| **FR-07** | Push Validation | Endpoint subscribe menolak `endpoint` yang bukan `https://` dan permintaan tanpa `keys`, dengan HTTP 400. |
+| **FR-08** | Push Delivery | Setelah laporan tersimpan ke Notion, notifikasi "Laporan baru tersimpan" dikirim ke semua subscriber yang aktif. |
+| **FR-09** | Push Cleanup | Subscription yang tidak valid (HTTP 404/410 dari push service) diarsipkan di Notion. |
 
 ---
 
@@ -194,13 +217,14 @@ export default function OfflinePage() {
 | 2 | **Service Worker State** | Chrome DevTools > Tab *Application* > *Service Workers* | Muncul status hijau `Activated and is running`. |
 | 3 | **Offline Simulation** | DevTools > Tab *Network* > pilih preset `Offline`, lalu reload | Halaman tidak menampilkan *Dinosaur Game* / `ERR_INTERNET_DISCONNECTED`. |
 | 4 | **Lighthouse Audit** | Chrome DevTools > Tab *Lighthouse* > Centang *Progressive Web App* | Lulus kategori **Installable** dan **PWA Optimized**. |
+| 5 | **Push Subscribe** | Klik *Aktifkan notifikasi* di form, izinkan notifikasi | Muncul baris baru di tabel `push_subscriptions` dengan `endpoint`, `p256dh`, `auth`, dan `createdAt` terisi. |
+| 6 | **Push Delivery** | Kirim satu laporan dengan aplikasi di background atau tertutup | Notifikasi "Laporan baru tersimpan" muncul di perangkat yang sudah subscribe (di HTTPS, dan di iOS setelah Add to Home Screen). |
 
 ---
 
 ## 9. Out of Scope
 
 ```
-- Integrasi Web Push Notifications.
 - Background Synchronization **API**.
 - Sinkronisasi data lokal ke cloud via IndexedDB/Dexie.js.
 ```
